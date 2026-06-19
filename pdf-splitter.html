@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF বিভাজক — জোড় ও বিজোড় পৃষ্ঠা আলাদা করুন</title>
+
+<!-- PDF-lib for splitting, PDF.js for preview -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #161921;
+    --surface2: #1e2230;
+    --border: #2a2f3f;
+    --accent: #4f8ef7;
+    --accent2: #a78bfa;
+    --even-color: #22c55e;
+    --odd-color: #f97316;
+    --text: #e8eaf0;
+    --muted: #7b82a0;
+    --danger: #ef4444;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Hind Siliguri', 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: linear-gradient(135deg, #0d0f14 0%, #111827 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+
+  .logo-icon {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 4px 20px rgba(79,142,247,.35);
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    background: linear-gradient(90deg, #e8eaf0, var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  header p {
+    font-size: .8rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* ── MAIN ── */
+  main {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* ── DROP ZONE ── */
+  #dropZone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 64px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .25s ease;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+
+  #dropZone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(79,142,247,.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  #dropZone.drag-over {
+    border-color: var(--accent);
+    background: rgba(79,142,247,.06);
+    transform: scale(1.01);
+    box-shadow: 0 0 40px rgba(79,142,247,.15);
+  }
+
+  .drop-icon {
+    font-size: 56px;
+    margin-bottom: 16px;
+    display: block;
+    filter: drop-shadow(0 4px 12px rgba(79,142,247,.4));
+  }
+
+  #dropZone h2 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  #dropZone p {
+    color: var(--muted);
+    font-size: .9rem;
+    margin-bottom: 24px;
+  }
+
+  .badge-row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: .75rem;
+    color: var(--muted);
+  }
+
+  #fileInput { display: none; }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, var(--accent), #3b6fd4);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 28px;
+    font-size: .95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    font-family: inherit;
+    box-shadow: 0 4px 16px rgba(79,142,247,.35);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(79,142,247,.5);
+  }
+
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-primary:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ── PROGRESS ── */
+  #progressSection {
+    display: none;
+    margin-top: 28px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    border: 1px solid var(--border);
+  }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: .85rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .progress-bar {
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 99px;
+    transition: width .3s ease;
+    width: 0%;
+  }
+
+  .progress-msg {
+    margin-top: 10px;
+    font-size: .82rem;
+    color: var(--muted);
+    min-height: 18px;
+  }
+
+  /* ── RESULT PANELS ── */
+  #resultSection {
+    display: none;
+    margin-top: 32px;
+  }
+
+  .file-info-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    font-size: .88rem;
+  }
+
+  .file-info-bar .fi-icon { font-size: 28px; }
+
+  .fi-details { flex: 1; }
+
+  .fi-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 400px;
+  }
+
+  .fi-meta { color: var(--muted); font-size: .78rem; margin-top: 2px; }
+
+  .btn-reset {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: .8rem;
+    cursor: pointer;
+    transition: all .2s;
+    font-family: inherit;
+  }
+
+  .btn-reset:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* Panels */
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 640px) { .panels { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    transition: box-shadow .2s;
+  }
+
+  .panel:hover { box-shadow: 0 4px 24px rgba(0,0,0,.3); }
+
+  .panel-header {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .panel-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .even .panel-dot { background: var(--even-color); box-shadow: 0 0 10px rgba(34,197,94,.5); }
+  .odd  .panel-dot { background: var(--odd-color);  box-shadow: 0 0 10px rgba(249,115,22,.5); }
+
+  .panel-title { font-weight: 700; font-size: 1rem; }
+  .page-count-badge {
+    margin-left: auto;
+    background: var(--surface2);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: .75rem;
+    color: var(--muted);
+  }
+
+  .panel-preview {
+    padding: 16px 20px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .page-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .pill {
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: .75rem;
+    font-weight: 600;
+    border: 1px solid;
+  }
+
+  .even .pill { background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.3); color: var(--even-color); }
+  .odd  .pill { background: rgba(249,115,22,.12); border-color: rgba(249,115,22,.3); color: var(--odd-color); }
+
+  .panel-actions {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .btn-download, .btn-print {
+    flex: 1;
+    min-width: 100px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border-radius: 9px;
+    padding: 10px 16px;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    font-family: inherit;
+    border: none;
+  }
+
+  .btn-download {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-download:hover { border-color: var(--accent); color: var(--accent); }
+
+  .even .btn-print {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(34,197,94,.3);
+  }
+
+  .even .btn-print:hover { box-shadow: 0 6px 20px rgba(34,197,94,.5); transform: translateY(-1px); }
+
+  .odd .btn-print {
+    background: linear-gradient(135deg, #ea580c, #c2410c);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(249,115,22,.3);
+  }
+
+  .odd .btn-print:hover { box-shadow: 0 6px 20px rgba(249,115,22,.5); transform: translateY(-1px); }
+
+  .btn-download:disabled, .btn-print:disabled {
+    opacity: .4; cursor: not-allowed; transform: none !important;
+  }
+
+  /* spinner */
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* tip */
+  .tip-box {
+    margin-top: 24px;
+    background: rgba(79,142,247,.07);
+    border: 1px solid rgba(79,142,247,.2);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    font-size: .82rem;
+    color: #93b4f5;
+    line-height: 1.6;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .tip-box .tip-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+
+  /* error */
+  .error-toast {
+    display: none;
+    margin-top: 16px;
+    background: rgba(239,68,68,.1);
+    border: 1px solid rgba(239,68,68,.3);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: .85rem;
+    color: #fca5a5;
+  }
+
+  .btn-pagenum {
+    flex: 1;
+    min-width: 100px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border-radius: 9px;
+    padding: 10px 16px;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    font-family: inherit;
+    border: none;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid rgba(167,139,250,.3);
+  }
+
+  .btn-pagenum:hover:not(:disabled) {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    box-shadow: 0 4px 14px rgba(167,139,250,.2);
+    transform: translateY(-1px);
+  }
+
+  .btn-pagenum:disabled { opacity: .4; cursor: not-allowed; transform: none !important; }
+
+  .btn-pagenum.active {
+    background: linear-gradient(135deg, rgba(167,139,250,.2), rgba(79,142,247,.2));
+    border-color: var(--accent2);
+    color: var(--accent2);
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+  /* print styles */
+  @media print {
+    body > *:not(#printFrame) { display: none !important; }
+    #printFrame { display: block !important; width: 100%; border: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-icon">📄</div>
+  <div>
+    <h1>PDF বিভাজক</h1>
+    <p>জোড় ও বিজোড় পৃষ্ঠা আলাদা করুন — সরাসরি প্রিন্ট করুন</p>
+  </div>
+</header>
+
+<main>
+
+  <!-- DROP ZONE -->
+  <div id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <span class="drop-icon">📂</span>
+    <h2>PDF ফাইল এখানে রাখুন বা ক্লিক করুন</h2>
+    <p>যেকোনো সাইজের PDF সমর্থিত — ১০০ MB+ ও চলবে</p>
+    <div class="badge-row">
+      <span class="badge">✓ ১০০ MB+ সমর্থন</span>
+      <span class="badge">✓ সার্ভার ছাড়াই কাজ করে</span>
+      <span class="badge">✓ ডেটা কোথাও যায় না</span>
+      <span class="badge">✓ সরাসরি প্রিন্ট</span>
+    </div>
+    <br>
+    <button class="btn-primary" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+      📁 ফাইল বেছে নিন
+    </button>
+    <input type="file" id="fileInput" accept=".pdf,application/pdf">
+  </div>
+
+  <div class="error-toast" id="errorToast"></div>
+
+  <!-- PROGRESS -->
+  <div id="progressSection">
+    <div class="progress-label">
+      <span>প্রক্রিয়া করা হচ্ছে...</span>
+      <span id="progressPercent">0%</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-msg" id="progressMsg">ফাইল লোড হচ্ছে...</div>
+  </div>
+
+  <!-- RESULT -->
+  <div id="resultSection">
+    <div class="file-info-bar">
+      <span class="fi-icon">📄</span>
+      <div class="fi-details">
+        <div class="fi-name" id="fiName"></div>
+        <div class="fi-meta" id="fiMeta"></div>
+      </div>
+      <button class="btn-reset" onclick="resetAll()">✕ নতুন ফাইল</button>
+    </div>
+
+    <div class="panels">
+      <!-- EVEN PANEL -->
+      <div class="panel even" id="evenPanel">
+        <div class="panel-header">
+          <div class="panel-dot"></div>
+          <span class="panel-title">জোড় পৃষ্ঠাসমূহ</span>
+          <span class="page-count-badge" id="evenCount">— পৃষ্ঠা</span>
+        </div>
+        <div class="panel-preview">
+          <div class="page-pills" id="evenPills"></div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn-download" id="btnDownloadEven" onclick="downloadPDF('even')" disabled>
+            ⬇ ডাউনলোড
+          </button>
+          <button class="btn-print" id="btnPrintEven" onclick="printPDF('even')" disabled>
+            🖨️ প্রিন্ট করুন
+          </button>
+          <button class="btn-pagenum" id="btnPageNumEven" onclick="addPageNumbers('even')" disabled>
+            🔢 পৃষ্ঠা নম্বর যোগ করুন
+          </button>
+        </div>
+      </div>
+
+      <!-- ODD PANEL -->
+      <div class="panel odd" id="oddPanel">
+        <div class="panel-header">
+          <div class="panel-dot"></div>
+          <span class="panel-title">বিজোড় পৃষ্ঠাসমূহ</span>
+          <span class="page-count-badge" id="oddCount">— পৃষ্ঠা</span>
+        </div>
+        <div class="panel-preview">
+          <div class="page-pills" id="oddPills"></div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn-download" id="btnDownloadOdd" onclick="downloadPDF('odd')" disabled>
+            ⬇ ডাউনলোড
+          </button>
+          <button class="btn-print" id="btnPrintOdd" onclick="printPDF('odd')" disabled>
+            🖨️ প্রিন্ট করুন
+          </button>
+          <button class="btn-pagenum" id="btnPageNumOdd" onclick="addPageNumbers('odd')" disabled>
+            🔢 পৃষ্ঠা নম্বর যোগ করুন
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip-box">
+      <span class="tip-icon">💡</span>
+      <span>
+        <strong>প্রিন্ট টিপস:</strong> প্রিন্ট বাটনে ক্লিক করলে ব্রাউজারের প্রিন্ট ডায়ালগ খুলবে।
+        Google Chrome-এ "Save as PDF" বা সরাসরি প্রিন্টার বেছে নিন।
+        ডুপ্লেক্স প্রিন্টিংয়ের জন্য প্রথমে জোড় পৃষ্ঠা প্রিন্ট করুন, তারপর কাগজ উল্টে বিজোড় পৃষ্ঠা প্রিন্ট করুন।
+      </span>
+    </div>
+  </div>
+
+</main>
+
+<!-- Hidden iframe for printing -->
+<iframe id="printFrame" style="position:fixed; top:-9999px; left:-9999px; width:800px; height:1200px; border:none;" title="Print Frame"></iframe>
+
+<script>
+  // Set PDF.js worker
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const { PDFDocument } = PDFLib;
+
+  let evenBytes = null;
+  let oddBytes  = null;
+  let originalFileName = '';
+  let evenPageNumAdded = false;
+  let oddPageNumAdded  = false;
+  // Store original bytes before page numbers added
+  let evenBytesOrig = null;
+  let oddBytesOrig  = null;
+  // Store original page indices for numbering
+  let evenOriginalIndices = [];
+  let oddOriginalIndices  = [];
+
+  /* ── DRAG & DROP ── */
+  const dz = document.getElementById('dropZone');
+
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) processFile(f);
+  });
+
+  document.getElementById('fileInput').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) processFile(f);
+    e.target.value = ''; // reset so same file can be re-selected
+  });
+
+  /* ── HELPERS ── */
+  function showError(msg) {
+    const el = document.getElementById('errorToast');
+    el.textContent = '⚠️ ' + msg;
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 6000);
+  }
+
+  function setProgress(pct, msg) {
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressPercent').textContent = pct + '%';
+    if (msg) document.getElementById('progressMsg').textContent = msg;
+  }
+
+  function formatBytes(b) {
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+    return (b / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function resetAll() {
+    evenBytes = null; oddBytes = null;
+    evenPageNumAdded = false; oddPageNumAdded = false;
+    document.getElementById('resultSection').style.display = 'none';
+    document.getElementById('progressSection').style.display = 'none';
+    document.getElementById('dropZone').style.display = 'block';
+    setProgress(0, '');
+    ['btnDownloadEven','btnPrintEven','btnDownloadOdd','btnPrintOdd','btnPageNumEven','btnPageNumOdd'].forEach(id => {
+      const el = document.getElementById(id);
+      el.disabled = true;
+      el.classList.remove('active');
+    });
+  }
+
+  /* ── MAIN PROCESSING ── */
+  async function processFile(file) {
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      showError('শুধুমাত্র PDF ফাইল গ্রহণযোগ্য।');
+      return;
+    }
+
+    originalFileName = file.name.replace(/\.pdf$/i, '');
+    document.getElementById('fiName').textContent = file.name;
+    document.getElementById('fiMeta').textContent = `আকার: ${formatBytes(file.size)}`;
+
+    document.getElementById('dropZone').style.display = 'none';
+    document.getElementById('progressSection').style.display = 'block';
+    document.getElementById('resultSection').style.display = 'none';
+    document.getElementById('errorToast').style.display = 'none';
+
+    try {
+      setProgress(5, 'ফাইল পড়া হচ্ছে...');
+      const arrayBuffer = await readFileAsArrayBuffer(file);
+
+      setProgress(20, 'PDF বিশ্লেষণ করা হচ্ছে...');
+      const srcDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: false });
+      const totalPages = srcDoc.getPageCount();
+
+      if (totalPages === 0) { showError('PDF-এ কোনো পৃষ্ঠা পাওয়া যায়নি।'); resetAll(); return; }
+
+      document.getElementById('fiMeta').textContent =
+        `আকার: ${formatBytes(file.size)} • মোট পৃষ্ঠা: ${totalPages}`;
+
+      // Build index arrays
+      const evenIndices = []; // 0-based indices for pages 2,4,6,... (even page numbers)
+      const oddIndices  = []; // 0-based indices for pages 1,3,5,... (odd page numbers)
+
+      for (let i = 0; i < totalPages; i++) {
+        const pageNum = i + 1; // 1-based
+        if (pageNum % 2 === 0) evenIndices.push(i);
+        else oddIndices.push(i);
+      }
+
+      setProgress(35, 'জোড় পৃষ্ঠাসমূহ তৈরি করা হচ্ছে...');
+      evenBytes = await buildPDF(srcDoc, evenIndices, p => setProgress(35 + p * 0.25, 'জোড় পৃষ্ঠাসমূহ তৈরি হচ্ছে...'));
+
+      setProgress(65, 'বিজোড় পৃষ্ঠাসমূহ তৈরি করা হচ্ছে...');
+      oddBytes  = await buildPDF(srcDoc, oddIndices,  p => setProgress(65 + p * 0.25, 'বিজোড় পৃষ্ঠাসমূহ তৈরি হচ্ছে...'));
+
+      setProgress(95, 'প্রস্তুত করা হচ্ছে...');
+
+      // Save original indices for page numbering
+      evenOriginalIndices = evenIndices.slice();
+      oddOriginalIndices  = oddIndices.slice();
+      evenBytesOrig = evenBytes;
+      oddBytesOrig  = oddBytes;
+      evenPageNumAdded = false;
+      oddPageNumAdded  = false;
+
+      // Update UI
+      fillPills('evenPills', evenIndices, 'even', totalPages);
+      fillPills('oddPills',  oddIndices,  'odd',  totalPages);
+
+      document.getElementById('evenCount').textContent = evenIndices.length + ' পৃষ্ঠা';
+      document.getElementById('oddCount').textContent  = oddIndices.length  + ' পৃষ্ঠা';
+
+      ['btnDownloadEven','btnPrintEven','btnDownloadOdd','btnPrintOdd','btnPageNumEven','btnPageNumOdd'].forEach(id => {
+        document.getElementById(id).disabled = false;
+      });
+
+      setProgress(100, 'সম্পন্ন!');
+      await sleep(400);
+      document.getElementById('progressSection').style.display = 'none';
+      document.getElementById('resultSection').style.display = 'block';
+
+    } catch (err) {
+      console.error(err);
+      showError('ত্রুটি: ' + (err.message || 'অজানা সমস্যা হয়েছে।'));
+      resetAll();
+    }
+  }
+
+  async function buildPDF(srcDoc, indices, progressCb) {
+    const newDoc = await PDFDocument.create();
+    const total = indices.length;
+    if (total === 0) {
+      // return empty PDF
+      return await newDoc.save();
+    }
+
+    // Copy pages in chunks to avoid blocking UI
+    const CHUNK = 20;
+    for (let c = 0; c < total; c += CHUNK) {
+      const chunk = indices.slice(c, c + CHUNK);
+      const copied = await newDoc.copyPages(srcDoc, chunk);
+      copied.forEach(p => newDoc.addPage(p));
+      if (progressCb) progressCb(Math.round((c + chunk.length) / total * 100));
+      await sleep(0); // yield to browser
+    }
+
+    return await newDoc.save();
+  }
+
+  function fillPills(containerId, indices, type, total) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    if (indices.length === 0) {
+      container.innerHTML = '<span style="color:var(--muted);font-size:.8rem;">এই ধরনের কোনো পৃষ্ঠা নেই</span>';
+      return;
+    }
+    // Show max 80 pills to avoid DOM issues
+    const show = indices.slice(0, 80);
+    show.forEach(i => {
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.textContent = (i + 1); // show 1-based page number
+      container.appendChild(pill);
+    });
+    if (indices.length > 80) {
+      const more = document.createElement('span');
+      more.className = 'pill';
+      more.textContent = `+${indices.length - 80} আরো`;
+      container.appendChild(more);
+    }
+  }
+
+  /* ── DOWNLOAD ── */
+  function downloadPDF(type) {
+    const bytes = type === 'even' ? evenBytes : oddBytes;
+    const label = type === 'even' ? 'জোড়-পৃষ্ঠা' : 'বিজোড়-পৃষ্ঠা';
+    if (!bytes) return;
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${originalFileName}_${label}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  /* ── PRINT ── */
+  async function printPDF(type) {
+    const bytes = type === 'even' ? evenBytes : oddBytes;
+    const btnId = type === 'even' ? 'btnPrintEven' : 'btnPrintOdd';
+    const btn   = document.getElementById(btnId);
+    if (!bytes) return;
+
+    btn.disabled = true;
+    const origHTML = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span> খুলছে...';
+
+    try {
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url  = URL.createObjectURL(blob);
+
+      // Open PDF in new tab — Chrome auto-triggers print dialog for PDFs
+      // when #toolbar=0&view=FitH is appended, or we use window.print() on load
+      const printWin = window.open('', '_blank');
+      if (!printWin) {
+        showError('পপআপ ব্লক করা আছে। ব্রাউজার সেটিংস থেকে পপআপ অনুমতি দিন।');
+        return;
+      }
+
+      // Write an auto-print HTML page that embeds the PDF and triggers print instantly
+      printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>প্রিন্ট</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #525659; }
+    embed { display: block; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <embed src="${url}" type="application/pdf" width="100%" height="100%">
+  <script>
+    // Trigger Chrome print dialog as soon as page is ready
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 500);
+    };
+  </scr` + `ipt>
+</body>
+</html>`);
+      printWin.document.close();
+
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+    } catch(e) {
+      showError('প্রিন্ট শুরু করতে সমস্যা: ' + e.message);
+    } finally {
+      await sleep(600);
+      btn.disabled = false;
+      btn.innerHTML = origHTML;
+    }
+  }
+
+  /* ── ADD PAGE NUMBERS ── */
+  async function addPageNumbers(type) {
+    const isEven  = type === 'even';
+    const bytes   = isEven ? evenBytesOrig : oddBytesOrig;
+    const indices = isEven ? evenOriginalIndices : oddOriginalIndices; // original 1-based page numbers
+    const btnId   = isEven ? 'btnPageNumEven' : 'btnPageNumOdd';
+    const btn     = document.getElementById(btnId);
+    if (!bytes) return;
+
+    // Toggle off if already added
+    if (isEven ? evenPageNumAdded : oddPageNumAdded) {
+      if (isEven) { evenBytes = evenBytesOrig; evenPageNumAdded = false; }
+      else        { oddBytes  = oddBytesOrig;  oddPageNumAdded  = false; }
+      btn.classList.remove('active');
+      btn.innerHTML = '🔢 পৃষ্ঠা নম্বর যোগ করুন';
+      return;
+    }
+
+    btn.disabled = true;
+    const origHTML = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span> যোগ হচ্ছে...';
+
+    try {
+      const pdfDoc = await PDFDocument.load(bytes);
+      const pages  = pdfDoc.getPages();
+      const font   = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+
+      pages.forEach((page, localIdx) => {
+        const originalPageNum = indices[localIdx] + 1; // 1-based page number from original PDF
+        const { width, height } = page.getSize();
+
+        const numStr   = String(originalPageNum);
+        const fontSize = 11;
+        const padding  = 6;
+        const textW    = font.widthOfTextAtSize(numStr, fontSize);
+        const boxW     = textW + padding * 2;
+        const boxH     = fontSize + padding * 1.4;
+
+        // Position: top-right corner
+        const marginRight = 18;
+        const marginTop   = 14;
+        const x = width  - boxW - marginRight;
+        const y = height - boxH - marginTop;
+
+        // Background rectangle (rounded feel via small rect)
+        page.drawRectangle({
+          x, y,
+          width:  boxW,
+          height: boxH,
+          color: PDFLib.rgb(0.95, 0.95, 0.95),
+          borderColor: PDFLib.rgb(0.7, 0.7, 0.7),
+          borderWidth: 0.5,
+          opacity: 0.92,
+        });
+
+        // Page number text — centered in box
+        page.drawText(numStr, {
+          x: x + padding,
+          y: y + padding * 0.7,
+          size: fontSize,
+          font,
+          color: PDFLib.rgb(0.15, 0.15, 0.15),
+        });
+      });
+
+      const newBytes = await pdfDoc.save();
+      if (isEven) { evenBytes = newBytes; evenPageNumAdded = true; }
+      else        { oddBytes  = newBytes; oddPageNumAdded  = true; }
+
+      btn.classList.add('active');
+      btn.innerHTML = '✅ পৃষ্ঠা নম্বর সরিয়ে নিন';
+
+    } catch(e) {
+      showError('পৃষ্ঠা নম্বর যোগে সমস্যা: ' + e.message);
+      btn.innerHTML = origHTML;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ── UTILS ── */
+  function readFileAsArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = e => resolve(e.target.result);
+      reader.onerror = () => reject(new Error('ফাইল পড়তে ব্যর্থ হয়েছে।'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
